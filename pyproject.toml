@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "datachunks"
+version = "0.0.1"
+description = "Data chunking for humans, particularly for data engineers"
+authors = ["Alexander Maslyeav <maslyaev@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/amaslyaev/datachunks/"
+repository = "https://github.com/amaslyaev/datachunks/"
+documentation = ""
+keywords = []
+classifiers = [
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Intended Audience :: Developers",
+    "Development Status :: 2 - Pre-Alpha",
+    "Programming Language :: Python :: 3"
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.dev-dependencies]
+pytest = "^6.2.4"
+pytest-cov = "^2.12.1"
+flake8 = "^3.9.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
