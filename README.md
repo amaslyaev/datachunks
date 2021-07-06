@@ -3,8 +3,6 @@
 Data chunking for humans, particularly for data engineers. Makes batched data
 processing less painful and a little bit more joyful.
 
-**ATTENTION!** This is a pre-alpha version!
-
 ## Install
 datachunks requires Python 3.8 or newer. Install it from PyPI:
 ```shell
@@ -64,12 +62,12 @@ and <code>put</code> into them odd and even values.
 from datachunks import ChunkingFeeder
 
 with ChunkingFeeder(lambda c: print(f'evens: {c}'), 5) as print_evens_feeder, \
-    ChunkingFeeder(lambda c: print(f'odds: {c}'), 5) as print_odds_feeder:
-        for i in range(25):
-            if i % 2 == 0:
-                print_evens_feeder.put(i)
-            else:
-                print_odds_feeder.put(i)
+        ChunkingFeeder(lambda c: print(f'odds: {c}'), 5) as print_odds_feeder:
+    for i in range(25):
+        if i % 2 == 0:
+            print_evens_feeder.put(i)
+        else:
+            print_odds_feeder.put(i)
 ```
 Expected output:
 ```
@@ -124,7 +122,7 @@ class TransferOrders():
 
     def do_transfer(self):
         with ChunkingFeeder(self.store_purchase_orders, 100, workers_num=1) as purchase_feeder, \
-            ChunkingFeeder(self.store_purchase_orders, 500, workers_num=1) as sales_feeder:
+                ChunkingFeeder(self.store_purchase_orders, 500, workers_num=1) as sales_feeder:
             for order in read_jsonl():
                 if order.get('order_type') == 'purchase':
                     purchase_feeder.put(order)

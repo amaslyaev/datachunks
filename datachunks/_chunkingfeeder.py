@@ -75,6 +75,7 @@ class ChunkingFeeder(ChunkingFeederBase):
                 self._out_q = TQueue(self._workers_num * (self._max_out_q_size_per_worker or 0))
             self._feeder_thread = Thread(target=self._thread_feeder)
             self._feeder_thread.start()
+        self._exc = None
         self.started = True
         return self
 
@@ -85,6 +86,7 @@ class ChunkingFeeder(ChunkingFeederBase):
             pool_class = futures.ThreadPoolExecutor
         with pool_class(max_workers=self._workers_num) as workers_pool:
             active_futures = set()
+            panic = False
             while True:
                 if self.finished:
                     try:
@@ -95,6 +97,9 @@ class ChunkingFeeder(ChunkingFeederBase):
                         chunk = None
                 else:
                     chunk = self._out_q.get()
+                if panic:
+                    active_futures = set()
+                    continue
                 if (active_futures
                         and (len(active_futures) >= self._workers_num
                              or (self.finished and chunk is None))):
@@ -102,18 +107,29 @@ class ChunkingFeeder(ChunkingFeederBase):
                         active_futures, return_when=futures.FIRST_COMPLETED)
                 else:
                     complete_futures = set()
-                    for future in list(active_futures):
-                        if future.done():
-                            complete_futures.add(future)
-                            active_futures.remove(future)
+                for future in list(active_futures):
+                    if future.done():
+                        complete_futures.add(future)
+                        active_futures.remove(future)
                 # Get results from complete futures to re-raise exceptions if any
                 for complete_future in complete_futures:
-                    _ = complete_future.result()
+                    try:
+                        _ = complete_future.result()
+                    except Exception as exc:
+                        with self._lock:
+                            self._exc = exc
+                        panic = True
+                        continue
                 if chunk is not None:
                     active_futures.add(workers_pool.submit(self.callback, chunk))
 
     def _apply_curr_chunk(self, finalize: bool):
         while True:
+            with self._lock:
+                if self._exc is not None:
+                    exc = self._exc
+                    self._exc = None
+                    raise exc
             chunk_to_process = None
             with self._lock:
                 if (self.curr_chunk and not self._callback_lock_flag
@@ -148,6 +164,9 @@ class ChunkingFeeder(ChunkingFeederBase):
         if self._workers_num > 0:
             self._out_q.put(None)
             self._feeder_thread.join()
+            with self._lock:
+                if self._exc is not None:
+                    raise self._exc
 
 
 class AsyncChunkingFeeder(ChunkingFeederBase):

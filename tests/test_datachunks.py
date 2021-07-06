@@ -64,7 +64,7 @@ def test_achunks():
     assert 'Use `chunks` function' in str(exc.value)
 
 
-def sync_consumer(consumed, chunk_size: int, pause_func, chunk: list):
+def sync_consumer(is_mp: bool, consumed, chunk_size: int, pause_func, fail_on: int, chunk: list):
     assert isinstance(chunk, list)
     assert 0 < len(chunk) <= chunk_size
     if pause_func:
@@ -72,14 +72,16 @@ def sync_consumer(consumed, chunk_size: int, pause_func, chunk: list):
             sleep(pause_func)
         elif callable(pause_func):
             sleep(pause_func(chunk))
-    if isinstance(consumed, list):
-        consumed += chunk
-    elif isinstance(consumed, dict) and 'queue' in consumed:
+    if fail_on is not None:
+        _ = [1 / (val - fail_on) for val in chunk]
+    if is_mp:
         for val in chunk:
-            consumed['queue'].put(val)
+            consumed.put(val)
+    else:
+        consumed += chunk
 
 
-async def async_consumer(consumed: list, chunk_size: int, pause_func, chunk: list):
+async def async_consumer(consumed: list, chunk_size: int, pause_func, fail_on: int, chunk: list):
     assert isinstance(chunk, list)
     assert 0 < len(chunk) <= chunk_size
     if pause_func:
@@ -87,6 +89,8 @@ async def async_consumer(consumed: list, chunk_size: int, pause_func, chunk: lis
             await asyncio.sleep(pause_func)
         elif callable(pause_func):
             await asyncio.sleep(pause_func(chunk))
+    if fail_on is not None:
+        _ = [1 / (val - fail_on) for val in chunk]
     consumed += chunk
 
 
@@ -109,79 +113,98 @@ def do_test_ceck_params_feeders(class_to_test, right_consumer, wrong_consumer):
     assert '"callback" parameter' in str(exc.value)
 
 
-class recursive_feeding_tester():
-    def __init__(self):
-        self.produced = []
-        self.consumed = []
-        self.feeder = None
-
-    def sync_consumer(self, chunk):
-        # Produces 100 additional items on value 13
-        self.consumed += chunk
-        if 13 in chunk:
-            for val in range(100, 200):
-                self.produced.append(val)
-                self.feeder.put(val)
-
-    async def async_consumer(self, chunk):
-        # Produces 100 additional items on value 13
-        self.consumed += chunk
-        if 13 in chunk:
-            for val in range(100, 200):
-                self.produced.append(val)
-                await self.feeder.aput(val)
-
-    def sync_do_test(self):
-        with ChunkingFeeder(self.sync_consumer, 3, workers_num=2) as self.feeder:
-            for val in range(14):
-                self.produced.append(val)
-                self.feeder.put(val)
-        # Test feeding after exiting context
-        self.produced.append(42)
-        self.feeder.put(42)
-        assert sorted(self.produced) == sorted(self.consumed)
-
-    async def async_do_test(self):
-        async with AsyncChunkingFeeder(self.async_consumer, 3, workers_num=2) as self.feeder:
-            for val in range(14):
-                self.produced.append(val)
-                await self.feeder.aput(val)
-        # Test feeding after exiting context
-        self.produced.append(42)
-        await self.feeder.aput(42)
-        assert sorted(self.produced) == sorted(self.consumed)
-
-
-def test_chunkingfeeder():
+def test_chunkingfeeder_params():
     do_test_ceck_params_feeders(ChunkingFeeder, sync_consumer, async_consumer)
 
-    # Simple case with one consumer
+
+def do_sync_test(is_mp: bool, workers_num: int, max_num: int,
+                 chunk_size, pause: float, fail_on: int):
     produced = []
     consumed = []
+    if is_mp:
+        mp_manager = multiprocessing.Manager()
+        consumed_q = mp_manager.Queue()
+        consumed_param = consumed_q
+    else:
+        consumed_param = consumed
+
     with ChunkingFeeder(
-            partial(sync_consumer, consumed, 3, None),
-            3) as feeder:
-        for val in range(10):
+            partial(sync_consumer, is_mp, consumed_param, chunk_size, pause, fail_on),
+            chunk_size, workers_num=workers_num, multiprocessing=is_mp) as feeder:
+        for val in range(max_num):
             produced.append(val)
             feeder.put(val)
+
+    produced.append(10000)
+    feeder.put(10000)
+
+    if is_mp:
+        while True:
+            try:
+                val = consumed_q.get_nowait()
+                consumed.append(val)
+            except EmptyQException:
+                break
+
     assert sorted(produced) == sorted(consumed)
 
+
+def test_chunkingfeeder_simple_case():
+    # Fully synchronous, one consumer, no deliberate fails
+    do_sync_test(False, 0, 10, 3, 0.001, None)
+
+
+def test_chunkingfeeder_out_of_context():
     # Feeding before entering context
     feeder = ChunkingFeeder(partial(sync_consumer, [], 3, None), 3)
     with pytest.raises(TypeError) as exc:
         feeder.put(1)
     assert '"with" scope' in str(exc.value)
 
+
+def test_chunkingfeeder_threads():
+    # 2 threads, one consumer, no deliberate fails
+    do_sync_test(False, 2, 20, 3, 0, None)
+    do_sync_test(False, 2, 20, 3, 0.001, None)
+    do_sync_test(False, 2, 200, 3, 0.001, None)
+
+
+def test_chunkingfeeder_mp():
+    # 2 processes, one consumer, no deliberate fails
+    do_sync_test(True, 2, 20, 3, 0, None)
+    do_sync_test(True, 2, 20, 3, 0.001, None)
+    do_sync_test(True, 2, 200, 3, 0.001, None)
+
+
+def test_chunkingfeeder_fail_in_thread():
+    # 2 threads, one consumer, deliberate fail on val==7
+    with pytest.raises(ZeroDivisionError):
+        do_sync_test(False, 2, 200, 3, 0.001, 7)
+    # On join thread...
+    with pytest.raises(ZeroDivisionError):
+        do_sync_test(False, 2, 10, 3, 0.001, 7)
+
+
+def test_chunkingfeeder_fail_in_mp():
+    # 2 processes, one consumer, deliberate fail on val==7
+    with pytest.raises(ZeroDivisionError):
+        do_sync_test(True, 2, 200, 3, 0.001, 7)
+    # On join thread...
+    with pytest.raises(ZeroDivisionError):
+        do_sync_test(True, 2, 10, 3, 0.001, 7)
+
+
+def test_chunkingfeeder_two_consumers():
     # Multple threaded consumers, and also feeding after exiting context
     produced_even = []
     consumed_even = []
     produced_odd = []
     consumed_odd = []
     with ChunkingFeeder(
-            partial(sync_consumer, consumed_even, 3, 0.005),
+            partial(sync_consumer, False, consumed_even, 3, 0.005, None),
             3, workers_num=2) as feeder_even, \
          ChunkingFeeder(
-            partial(sync_consumer, consumed_odd, 3, 0.006),
+            partial(sync_consumer, False, consumed_odd, 3, 0.006, None),
             3, workers_num=2) as feeder_odd:
         for val in range(1000):
             if val % 2 == 0:
@@ -190,62 +213,38 @@ def test_chunkingfeeder():
             else:
                 produced_odd.append(val)
                 feeder_odd.put(val)
-    produced_even.append(10000)
-    feeder_even.put(10000)
-    produced_odd.append(10001)
-    feeder_odd.put(10001)
     assert sorted(produced_even) == sorted(consumed_even)
     assert sorted(produced_odd) == sorted(consumed_odd)
 
-    # Muliprocessed consumers, and also feeding after exiting context
-    produced = []
-    consumed = []
-    mp_manager = multiprocessing.Manager()
-    consumed_q = mp_manager.Queue()
 
-    with ChunkingFeeder(
-            partial(sync_consumer, {'queue': consumed_q}, 3, 0.002),
-            3, workers_num=2, multiprocessing=True) as feeder:
-        for val in range(200):
-            produced.append(val)
-            feeder.put(val)
-    produced.append(10000)
-    feeder.put(10000)
-    while True:
-        try:
-            val = consumed_q.get_nowait()
-            consumed.append(val)
-        except EmptyQException:
-            break
-    assert sorted(produced) == sorted(consumed)
-
-    # Test recursive feeding
-    recursive_feeding_tester().sync_do_test()
-
-
-def test_asyncchunkingfeeder():
+def test_asyncchunkingfeeder_params():
     do_test_ceck_params_feeders(AsyncChunkingFeeder, async_consumer, sync_consumer)
 
+
+def test_asyncchunkingfeeder_simple_case():
     async def do_it_async():
         # Simple case with one consumer
         produced = []
         consumed = []
         async with AsyncChunkingFeeder(
-                partial(async_consumer, consumed, 3, None),
+                partial(async_consumer, consumed, 3, None, None),
                 3) as feeder:
             for val in range(10):
                 produced.append(val)
                 await feeder.aput(val)
+        produced.append(42)
+        await feeder.aput(42)
         assert sorted(produced) == sorted(consumed)
 
+    asyncio.run(do_it_async())
+
+
+def test_asyncchunkingfeeder_out_of_context():
+    async def do_it_async():
         # Feeding before entering context
-        feeder = AsyncChunkingFeeder(partial(async_consumer, [], 3, None), 3)
+        feeder = AsyncChunkingFeeder(partial(async_consumer, [], 3, None, None), 3)
         with pytest.raises(TypeError) as exc:
             await feeder.aput(1)
         assert '"with" scope' in str(exc.value)
 
     asyncio.run(do_it_async())
-
-    # Test recursive feeding
-    rfeeder = recursive_feeding_tester()
-    asyncio.run(rfeeder.async_do_test())
