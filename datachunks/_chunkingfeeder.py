@@ -10,6 +10,7 @@ from threading import Thread, Lock
 from concurrent import futures
 from queue import Queue as TQueue, Empty as EmptyQException
 from multiprocessing import Queue as MPQueue
+from platform import python_version
 
 
 class ChunkingFeederBase:
@@ -174,7 +175,7 @@ class AsyncChunkingFeeder(ChunkingFeederBase):
     Asynchronous version of chunking feeder.
     """
     def __init__(self, callback, chunk_size: int, *, workers_num: int = 1):
-        if not asyncio.iscoroutinefunction(callback):
+        if not asyncio.iscoroutinefunction(callback) and not python_version().startswith('3.7.'):
             raise ValueError(
                 'Async function was expected in the "callback" parameter')
         super().__init__(callback, chunk_size, workers_num=workers_num)

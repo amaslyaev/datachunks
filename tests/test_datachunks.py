@@ -3,6 +3,7 @@ from time import sleep
 from functools import partial
 import multiprocessing
 from queue import Empty as EmptyQException
+from platform import python_version
 
 import pytest
 
@@ -108,9 +109,10 @@ def do_test_ceck_params_feeders(class_to_test, right_consumer, wrong_consumer):
         class_to_test(right_consumer, 1, workers_num='haha')
     assert '"workers_num" parameter' in str(exc.value)
 
-    with pytest.raises(ValueError) as exc:
-        class_to_test(partial(wrong_consumer, [], 3, None), 3)
-    assert '"callback" parameter' in str(exc.value)
+    if not python_version().startswith('3.7.'):  # 3.7 cannot recognize cor.function after partial
+        with pytest.raises(ValueError) as exc:
+            class_to_test(partial(wrong_consumer, [], 3, None), 3)
+        assert '"callback" parameter' in str(exc.value)
 
 
 def test_chunkingfeeder_params():

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "datachunks"
-version = "0.0.3"
+version = "0.0.4"
 description = "Data chunking for humans, particularly for data engineers"
 authors = ["Alexander Maslyeav <maslyaev@gmail.com>"]
 license = "MIT"
@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.7"
 
 [tool.poetry.dev-dependencies]
 pytest = "^6.2.4"
