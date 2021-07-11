@@ -6,3 +6,6 @@ __pycache__
 .*.sh
 .pylint*
 dist
+htmlcov
+junit
+coverage.xml
