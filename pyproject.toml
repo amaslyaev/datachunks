@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "datachunks"
-version = "0.0.3"
+version = "0.0.4"
 description = "Data chunking for humans, particularly for data engineers"
 authors = ["Alexander Maslyeav <maslyaev@gmail.com>"]
 license = "MIT"
