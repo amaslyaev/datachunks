@@ -20,7 +20,6 @@ async def arange(num):
 
 
 def async_chunks_tc(num: int, chunk_size: int, expected_answer):
-
     async def do_it_async():
         assert [el async for el in achunks(arange(num), chunk_size)] == expected_answer
 
@@ -34,12 +33,12 @@ def do_test_chunks(testing_func):
     # Ordinary cases
     testing_func(10, 5, [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]])
     testing_func(12, 5, [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11]])
-    testing_func(2, 5, [[0, 1], ])
+    testing_func(2, 5, [[0, 1]])
 
     # Weird but correct chunk sizes
     # 1. Chunk sizes < 1 work like chunk_size == 1
-    testing_func(3, 0, [[0, ], [1, ], [2, ], ])
-    testing_func(3, -100, [[0, ], [1, ], [2, ], ])
+    testing_func(3, 0, [[0], [1], [2]])
+    testing_func(3, -100, [[0], [1], [2]])
     # 2. Floating-point chunk sizes work like nearest bigger integer
     testing_func(10, 4.1, [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]])
     testing_func(12, 4.1, [[0, 1, 2, 3, 4], [5, 6, 7, 8, 9], [10, 11]])
@@ -50,7 +49,7 @@ def test_chunks():
 
     with pytest.raises(ValueError) as exc:
         list(chunks(arange(1), 1))
-    assert 'Use `achunks` function' in str(exc.value)
+    assert "Use `achunks` function" in str(exc.value)
 
 
 def test_achunks():
@@ -62,10 +61,12 @@ def test_achunks():
             return [el async for el in achunks(range(1), 1)]
 
         asyncio.run(do_it_async())
-    assert 'Use `chunks` function' in str(exc.value)
+    assert "Use `chunks` function" in str(exc.value)
 
 
-def sync_consumer(is_mp: bool, consumed, chunk_size: int, pause_func, fail_on: int, chunk: list):
+def sync_consumer(
+    is_mp: bool, consumed, chunk_size: int, pause_func, fail_on: int, chunk: list
+):
     assert isinstance(chunk, list)
     assert 0 < len(chunk) <= chunk_size
     if pause_func:
@@ -82,7 +83,9 @@ def sync_consumer(is_mp: bool, consumed, chunk_size: int, pause_func, fail_on: i
         consumed += chunk
 
 
-async def async_consumer(consumed: list, chunk_size: int, pause_func, fail_on: int, chunk: list):
+async def async_consumer(
+    consumed: list, chunk_size: int, pause_func, fail_on: int, chunk: list
+):
     assert isinstance(chunk, list)
     assert 0 < len(chunk) <= chunk_size
     if pause_func:
@@ -102,14 +105,16 @@ def do_test_ceck_params_feeders(class_to_test, right_consumer, wrong_consumer):
     assert '"callback" parameter' in str(exc.value)
 
     with pytest.raises(ValueError) as exc:
-        class_to_test(right_consumer, 'haha')
+        class_to_test(right_consumer, "haha")
     assert '"chunk_size" parameter' in str(exc.value)
 
     with pytest.raises(ValueError) as exc:
-        class_to_test(right_consumer, 1, workers_num='haha')
+        class_to_test(right_consumer, 1, workers_num="haha")
     assert '"workers_num" parameter' in str(exc.value)
 
-    if not python_version().startswith('3.7.'):  # 3.7 cannot recognize cor.function after partial
+    if not python_version().startswith(
+        "3.7."
+    ):  # 3.7 cannot recognize cor.function after partial
         with pytest.raises(ValueError) as exc:
             class_to_test(partial(wrong_consumer, [], 3, None), 3)
         assert '"callback" parameter' in str(exc.value)
@@ -119,8 +124,9 @@ def test_chunkingfeeder_params():
     do_test_ceck_params_feeders(ChunkingFeeder, sync_consumer, async_consumer)
 
 
-def do_sync_test(is_mp: bool, workers_num: int, max_num: int,
-                 chunk_size, pause: float, fail_on: int):
+def do_sync_test(
+    is_mp: bool, workers_num: int, max_num: int, chunk_size, pause: float, fail_on: int
+):
     produced = []
     consumed = []
     if is_mp:
@@ -131,8 +137,11 @@ def do_sync_test(is_mp: bool, workers_num: int, max_num: int,
         consumed_param = consumed
 
     with ChunkingFeeder(
-            partial(sync_consumer, is_mp, consumed_param, chunk_size, pause, fail_on),
-            chunk_size, workers_num=workers_num, multiprocessing=is_mp) as feeder:
+        partial(sync_consumer, is_mp, consumed_param, chunk_size, pause, fail_on),
+        chunk_size,
+        workers_num=workers_num,
+        multiprocessing=is_mp,
+    ) as feeder:
         for val in range(max_num):
             produced.append(val)
             feeder.put(val)
@@ -203,11 +212,10 @@ def test_chunkingfeeder_two_consumers():
     produced_odd = []
     consumed_odd = []
     with ChunkingFeeder(
-            partial(sync_consumer, False, consumed_even, 3, 0.005, None),
-            3, workers_num=2) as feeder_even, \
-         ChunkingFeeder(
-            partial(sync_consumer, False, consumed_odd, 3, 0.006, None),
-            3, workers_num=2) as feeder_odd:
+        partial(sync_consumer, False, consumed_even, 3, 0.005, None), 3, workers_num=2
+    ) as feeder_even, ChunkingFeeder(
+        partial(sync_consumer, False, consumed_odd, 3, 0.006, None), 3, workers_num=2
+    ) as feeder_odd:
         for val in range(1000):
             if val % 2 == 0:
                 produced_even.append(val)
@@ -229,8 +237,8 @@ def test_asyncchunkingfeeder_simple_case():
         produced = []
         consumed = []
         async with AsyncChunkingFeeder(
-                partial(async_consumer, consumed, 3, None, None),
-                3) as feeder:
+            partial(async_consumer, consumed, 3, None, None), 3
+        ) as feeder:
             for val in range(10):
                 produced.append(val)
                 await feeder.aput(val)

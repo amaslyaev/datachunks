@@ -1,8 +1,9 @@
 """
-Provides something like a "chunks" function, but works in opposite direction: instead of pulling
-chunks we push values to be chunked, and this thing feeds a specified callback function with chunks
-of specified size. This approach gives a possibility to build much more interesting data processing
-schemas than linear pipelines that are only possible using "chunks" function.
+Provides something like a "chunks" function, but works in opposite direction: instead
+of pulling chunks we push values to be chunked, and this thing feeds a specified
+callback function with chunks of specified size. This approach gives a possibility
+to build much more interesting data processing schemas than linear pipelines that
+are only possible using "chunks" function.
 """
 
 import asyncio
@@ -17,11 +18,19 @@ class ChunkingFeederBase:
     """
     Base class for ChunkingFeeder and AsyncChunkingFeeder
     """
-    def __init__(self, callback, chunk_size: int, *, workers_num: int = 0,
-                 max_out_q_size_per_worker: int = 10):
+
+    def __init__(
+        self,
+        callback,
+        chunk_size: int,
+        *,
+        workers_num: int = 0,
+        max_out_q_size_per_worker: int = 10,
+    ):
         """
-        :param callback: function with one positional parameter that will recieve lists of entries.
-            For asynchronous version this callback function must be "async".
+        :param callback: function with one positional parameter that will recieve
+            lists of entries. For asynchronous version this callback function
+            must be "async".
         :param chunk_size: desired size of chunks.
         :param workers_num: number of workers.
         :param max_out_q_size_per_worker: length of chunks buffer.
@@ -29,14 +38,18 @@ class ChunkingFeederBase:
         if not callable(callback):
             raise ValueError(
                 'The callable object was expected in the "callback" parameter '
-                f'({type(callback).__name__} given)')
+                f"({type(callback).__name__} given)"
+            )
         if not isinstance(chunk_size, (int, float)):
             raise ValueError(
-                f'Expected number in the "chunk_size" parameter ({type(callback).__name__} given)')
+                'Expected number in the "chunk_size" parameter '
+                f"({type(callback).__name__} given)"
+            )
         if not isinstance(workers_num, int) or workers_num < 0:
             raise ValueError(
                 'Expected non-negative integer in the "workers_num" parameter '
-                f'({str(workers_num)[:20]} given)')
+                f"({str(workers_num)[:20]} given)"
+            )
         self.curr_chunk = []
         self.callback = callback
         self.chunk_size = max(1, chunk_size)
@@ -52,18 +65,31 @@ class ChunkingFeeder(ChunkingFeederBase):
     """
     Synchronous, and also multithreaded/multiprocessed version of chunking feeder.
     """
-    def __init__(self, callback, chunk_size: int, *, workers_num: int = 0,
-                 max_out_q_size_per_worker: int = 10, multiprocessing: bool = False):
+
+    def __init__(
+        self,
+        callback,
+        chunk_size: int,
+        *,
+        workers_num: int = 0,
+        max_out_q_size_per_worker: int = 10,
+        multiprocessing: bool = False,
+    ):
         """
-        :param multiprocessing: set to True to use multiprocessing instead of multithreading.
+        :param multiprocessing: set to True to use multiprocessing
+            instead of multithreading.
         """
         if asyncio.iscoroutinefunction(callback):
             raise ValueError(
                 'Async function was not expected in the "callback" parameter. '
-                'Use AsyncChunkingFeeder instead')
+                "Use AsyncChunkingFeeder instead"
+            )
         super().__init__(
-            callback, chunk_size, workers_num=workers_num,
-            max_out_q_size_per_worker=max_out_q_size_per_worker)
+            callback,
+            chunk_size,
+            workers_num=workers_num,
+            max_out_q_size_per_worker=max_out_q_size_per_worker,
+        )
         self._multiprocessing = multiprocessing
         self._out_q = None
         self._feeder_thread = None
@@ -71,9 +97,13 @@ class ChunkingFeeder(ChunkingFeederBase):
     def __enter__(self):
         if self._workers_num > 0:
             if self._multiprocessing:
-                self._out_q = MPQueue(self._workers_num * (self._max_out_q_size_per_worker or 0))
+                self._out_q = MPQueue(
+                    self._workers_num * (self._max_out_q_size_per_worker or 0)
+                )
             else:
-                self._out_q = TQueue(self._workers_num * (self._max_out_q_size_per_worker or 0))
+                self._out_q = TQueue(
+                    self._workers_num * (self._max_out_q_size_per_worker or 0)
+                )
             self._feeder_thread = Thread(target=self._thread_feeder)
             self._feeder_thread.start()
         self._exc = None
@@ -101,11 +131,13 @@ class ChunkingFeeder(ChunkingFeederBase):
                 if panic:
                     active_futures = set()
                     continue
-                if (active_futures
-                        and (len(active_futures) >= self._workers_num
-                             or (self.finished and chunk is None))):
+                if active_futures and (
+                    len(active_futures) >= self._workers_num
+                    or (self.finished and chunk is None)
+                ):
                     complete_futures, active_futures = futures.wait(
-                        active_futures, return_when=futures.FIRST_COMPLETED)
+                        active_futures, return_when=futures.FIRST_COMPLETED
+                    )
                 else:
                     complete_futures = set()
                 for future in list(active_futures):
@@ -133,12 +165,20 @@ class ChunkingFeeder(ChunkingFeederBase):
                     raise exc
             chunk_to_process = None
             with self._lock:
-                if (self.curr_chunk and not self._callback_lock_flag
-                        and (finalize or self.finished
-                             or len(self.curr_chunk) >= self.chunk_size)):
+                if (
+                    self.curr_chunk
+                    and not self._callback_lock_flag
+                    and (
+                        finalize
+                        or self.finished
+                        or len(self.curr_chunk) >= self.chunk_size
+                    )
+                ):
                     self._callback_lock_flag = True
-                    chunk_to_process, self.curr_chunk = \
-                        self.curr_chunk[:self.chunk_size], self.curr_chunk[self.chunk_size:]
+                    chunk_to_process, self.curr_chunk = (
+                        self.curr_chunk[: self.chunk_size],
+                        self.curr_chunk[self.chunk_size :],
+                    )
                 else:
                     break
             if self._workers_num == 0 or self.finished:
@@ -150,7 +190,8 @@ class ChunkingFeeder(ChunkingFeederBase):
 
     def put(self, value):
         """
-        :param value: - a value to put to the chunk that will be passed to a chunks consumer
+        :param value: - a value to put to the chunk that will be passed
+            to a chunks consumer
         """
         if not self.started:
             raise TypeError('Use ChunkingFeeder object only inside a "with" scope')
@@ -174,10 +215,12 @@ class AsyncChunkingFeeder(ChunkingFeederBase):
     """
     Asynchronous version of chunking feeder.
     """
+
     def __init__(self, callback, chunk_size: int, *, workers_num: int = 1):
-        if not asyncio.iscoroutinefunction(callback) and not python_version().startswith('3.7.'):
-            raise ValueError(
-                'Async function was expected in the "callback" parameter')
+        if not asyncio.iscoroutinefunction(
+            callback
+        ) and not python_version().startswith("3.7."):
+            raise ValueError('Async function was expected in the "callback" parameter')
         super().__init__(callback, chunk_size, workers_num=workers_num)
         self._awaiting = set()
 
@@ -189,12 +232,20 @@ class AsyncChunkingFeeder(ChunkingFeederBase):
         while True:
             chunk_to_process = None
             with self._lock:
-                if (self.curr_chunk and not self._callback_lock_flag
-                        and (finalize or self.finished
-                             or len(self.curr_chunk) >= self.chunk_size)):
+                if (
+                    self.curr_chunk
+                    and not self._callback_lock_flag
+                    and (
+                        finalize
+                        or self.finished
+                        or len(self.curr_chunk) >= self.chunk_size
+                    )
+                ):
                     self._callback_lock_flag = True
-                    chunk_to_process, self.curr_chunk = \
-                        self.curr_chunk[:self.chunk_size], self.curr_chunk[self.chunk_size:]
+                    chunk_to_process, self.curr_chunk = (
+                        self.curr_chunk[: self.chunk_size],
+                        self.curr_chunk[self.chunk_size :],
+                    )
                 else:
                     if not finalize or not self._awaiting:
                         break
@@ -202,21 +253,28 @@ class AsyncChunkingFeeder(ChunkingFeederBase):
                 if chunk_to_process:
                     await self.callback(chunk_to_process)
             else:
-                if self._awaiting and (len(self._awaiting) >= self._workers_num or finalize):
+                if self._awaiting and (
+                    len(self._awaiting) >= self._workers_num or finalize
+                ):
                     complete_futures, self._awaiting = await asyncio.wait(
-                        self._awaiting, return_when=asyncio.FIRST_COMPLETED)
+                        self._awaiting, return_when=asyncio.FIRST_COMPLETED
+                    )
                     # Get results from complete futures to re-raise exceptions if any
                     for complete_future in complete_futures:
                         _ = complete_future.result()
                 if chunk_to_process:
-                    self._awaiting.add(asyncio.get_running_loop().create_task(
-                        self.callback(chunk_to_process)))
+                    self._awaiting.add(
+                        asyncio.get_running_loop().create_task(
+                            self.callback(chunk_to_process)
+                        )
+                    )
             with self._lock:
                 self._callback_lock_flag = False
 
     async def aput(self, value):
         """
-        :param value: - a value to put to the chunk that will be passed to a chunks consumer
+        :param value: - a value to put to the chunk that will be passed
+            to a chunks consumer
         """
         if not self.started:
             raise TypeError('Use ChunkingFeeder object only inside a "with" scope')
