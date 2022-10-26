@@ -4,6 +4,7 @@ from functools import partial
 import multiprocessing
 from queue import Empty as EmptyQException
 from platform import python_version
+from typing import List
 
 import pytest
 
@@ -128,7 +129,7 @@ def do_sync_test(
     is_mp: bool, workers_num: int, max_num: int, chunk_size, pause: float, fail_on: int
 ):
     produced = []
-    consumed = []
+    consumed: List[int] = []
     if is_mp:
         mp_manager = multiprocessing.Manager()
         consumed_q = mp_manager.Queue()
