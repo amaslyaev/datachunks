@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "datachunks"
-version = "0.0.5"
+version = "0.0.6"
 description = "Data chunking for humans, particularly for data engineers"
 authors = ["Alexander Maslyeav <maslyaev@gmail.com>"]
 license = "MIT"
@@ -12,7 +12,7 @@ keywords = []
 classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Intended Audience :: Developers",
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3"
 ]
 
@@ -24,6 +24,7 @@ pytest = "^6.2.4"
 pytest-cov = "^2.12.1"
 flake8 = "^3.9.2"
 black = "^22.6.0"
+mypy = "^0.982"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

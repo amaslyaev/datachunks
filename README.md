@@ -1,3 +1,8 @@
+[![PyPI pyversions](https://img.shields.io/pypi/pyversions/datachunks.svg)](https://pypi.python.org/pypi/datachunks/)
+[![PyPI status](https://img.shields.io/pypi/status/datachunks.svg)](https://pypi.python.org/pypi/datachunks/)
+[![GitHub license](https://img.shields.io/github/license/Naereen/StrapDown.js.svg)](https://github.com/amaslyaev/datachunks/blob/master/LICENSE)
+[![Code style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black/)
+
 # datachunks
 
 Data chunking for humans, particularly for data engineers. Makes batched data

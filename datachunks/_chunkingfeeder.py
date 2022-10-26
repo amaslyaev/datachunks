@@ -12,6 +12,9 @@ from concurrent import futures
 from queue import Queue as TQueue, Empty as EmptyQException
 from multiprocessing import Queue as MPQueue
 from platform import python_version
+from typing import Awaitable, Callable, List, Set, TypeVar, Union
+
+_T = TypeVar("_T")
 
 
 class ChunkingFeederBase:
@@ -50,7 +53,7 @@ class ChunkingFeederBase:
                 'Expected non-negative integer in the "workers_num" parameter '
                 f"({str(workers_num)[:20]} given)"
             )
-        self.curr_chunk = []
+        self.curr_chunk: List = []
         self.callback = callback
         self.chunk_size = max(1, chunk_size)
         self.started = False
@@ -68,7 +71,7 @@ class ChunkingFeeder(ChunkingFeederBase):
 
     def __init__(
         self,
-        callback,
+        callback: Callable[[List[_T]], None],
         chunk_size: int,
         *,
         workers_num: int = 0,
@@ -91,7 +94,7 @@ class ChunkingFeeder(ChunkingFeederBase):
             max_out_q_size_per_worker=max_out_q_size_per_worker,
         )
         self._multiprocessing = multiprocessing
-        self._out_q = None
+        self._out_q: Union[MPQueue, TQueue, None] = None
         self._feeder_thread = None
 
     def __enter__(self):
@@ -184,11 +187,12 @@ class ChunkingFeeder(ChunkingFeederBase):
             if self._workers_num == 0 or self.finished:
                 self.callback(chunk_to_process)
             else:
-                self._out_q.put(chunk_to_process)
+                if self._out_q is not None:
+                    self._out_q.put(chunk_to_process)
             with self._lock:
                 self._callback_lock_flag = False
 
-    def put(self, value):
+    def put(self, value: _T):
         """
         :param value: - a value to put to the chunk that will be passed
             to a chunks consumer
@@ -216,13 +220,19 @@ class AsyncChunkingFeeder(ChunkingFeederBase):
     Asynchronous version of chunking feeder.
     """
 
-    def __init__(self, callback, chunk_size: int, *, workers_num: int = 1):
+    def __init__(
+        self,
+        callback: Callable[[List[_T]], Awaitable],
+        chunk_size: int,
+        *,
+        workers_num: int = 1,
+    ):
         if not asyncio.iscoroutinefunction(
             callback
         ) and not python_version().startswith("3.7."):
             raise ValueError('Async function was expected in the "callback" parameter')
         super().__init__(callback, chunk_size, workers_num=workers_num)
-        self._awaiting = set()
+        self._awaiting: Set[asyncio.Task] = set()
 
     async def __aenter__(self):
         self.started = True
@@ -271,7 +281,7 @@ class AsyncChunkingFeeder(ChunkingFeederBase):
             with self._lock:
                 self._callback_lock_flag = False
 
-    async def aput(self, value):
+    async def aput(self, value: _T):
         """
         :param value: - a value to put to the chunk that will be passed
             to a chunks consumer
